@@ -1,0 +1,39 @@
+name: register
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+permissions:
+  contents: write
+concurrency:
+  group: register
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements.txt && playwright install --with-deps chromium
+      - name: write mail.txt from secret
+        run: printf '%s\n' "$MAIL_TXT" > mail.txt
+        env:
+          MAIL_TXT: ${{ secrets.MAIL_TXT }}
+      - run: python register.py
+        timeout-minutes: 31
+        env:
+          REG_PASSWORD: ${{ secrets.REG_PASSWORD }}
+          INTERVAL: "120"
+          DURATION: "1800"
+      - name: commit results
+        if: always()
+        run: |
+          rm -f mail.txt
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add data.txt done.txt
+          git diff --cached --quiet || git commit -m "update data"
+          git pull --rebase
+          git push
